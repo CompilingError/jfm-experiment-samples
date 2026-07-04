@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Folder Watcher App</title>
+    <link rel="stylesheet" href="./index.css" />
+  </head>
+
+  <body>
+    <h1>Folder Watcher App</h1>
+
+    <button id="select-folder-button">Select Folder</button>
+    <button id="refresh-button">Refresh</button>
+
+    <h2>Watched Folders</h2>
+    <p>
+      Folder count:
+      <span id="folder-count">0</span>
+    </p>
+    <ul id="folder-list"></ul>
+
+    <h2>Watcher</h2>
+    <p>
+      Watcher status:
+      <span id="watcher-status">Not started</span>
+    </p>
+    <p>
+      Last change:
+      <span id="last-change">None</span>
+    </p>
+
+    <h2>Files</h2>
+    <p>
+      File count:
+      <span id="file-count">0</span>
+    </p>
+    <ul id="file-list"></ul>
+
+    <script>
+      const selectFolderButton = document.getElementById('select-folder-button');
+      const refreshButton = document.getElementById('refresh-button');
+
+      const folderCountText = document.getElementById('folder-count');
+      const folderList = document.getElementById('folder-list');
+
+      const fileCountText = document.getElementById('file-count');
+      const fileList = document.getElementById('file-list');
+
+      const watcherStatusText = document.getElementById('watcher-status');
+      const lastChangeText = document.getElementById('last-change');
+
+      function renderWatchedFolders(folders) {
+        folderList.innerHTML = '';
+        folderCountText.textContent = folders.length;
+
+        if (folders.length === 0) {
+          const item = document.createElement('li');
+          item.textContent = 'No watched folders.';
+          folderList.appendChild(item);
+          return;
+        }
+
+        folders.forEach((folderPath) => {
+          const item = document.createElement('li');
+          item.textContent = folderPath;
+          folderList.appendChild(item);
+        });
+      }
+
+      function renderFileList(files) {
+        fileList.innerHTML = '';
+        fileCountText.textContent = files.length;
+
+        if (files.length === 0) {
+          const item = document.createElement('li');
+          item.textContent = 'No target files found.';
+          fileList.appendChild(item);
+          return;
+        }
+
+        files.forEach((file) => {
+          const item = document.createElement('li');
+
+          item.textContent = `${file.relativePath} | ${file.fullPath}`;
+
+          fileList.appendChild(item);
+        });
+      }
+
+      async function loadWatchedFolders() {
+        const watchedFolders = await window.folderAPI.getWatchedFolders();
+
+        renderWatchedFolders(watchedFolders);
+
+        return watchedFolders;
+      }
+
+      async function loadAllFilesFromWatchedFolders() {
+        const watchedFolders = await loadWatchedFolders();
+
+        let allFiles = [];
+
+        for (const folderPath of watchedFolders) {
+          const files = await window.folderAPI.getFiles(folderPath);
+
+          allFiles = allFiles.concat(files);
+        }
+
+        // 用 fullPath 去重，避免重复显示同一个文件
+        const fileMap = new Map();
+
+        allFiles.forEach((file) => {
+          fileMap.set(file.fullPath, file);
+        });
+
+        const uniqueFiles = Array.from(fileMap.values());
+
+        renderFileList(uniqueFiles);
+      }
+
+      async function startWatcher() {
+        const results = await window.folderAPI.startWatching();
+
+        const watchingCount = results.filter((item) => item.success).length;
+
+        watcherStatusText.textContent = `Watching ${watchingCount} folder(s).`;
+      }
+
+      selectFolderButton.addEventListener('click', async () => {
+        const selectedFolder = await window.folderAPI.selectFolder();
+
+        if (!selectedFolder) {
+          return;
+        }
+
+        await loadAllFilesFromWatchedFolders();
+        await startWatcher();
+      });
+
+      refreshButton.addEventListener('click', async () => {
+        await loadAllFilesFromWatchedFolders();
+      });
+
+      // 页面打开时自动加载 config 里的目录和文件
+      window.addEventListener('DOMContentLoaded', async () => {
+        window.folderAPI.onFolderChanged(async (changeInfo) => {
+          lastChangeText.textContent = `${changeInfo.eventType}: ${changeInfo.fileName}`;
+
+          await loadAllFilesFromWatchedFolders();
+        });
+
+        await loadAllFilesFromWatchedFolders();
+        await startWatcher();
+      });
+    </script>
+  </body>
+</html>
